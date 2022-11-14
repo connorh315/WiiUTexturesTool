@@ -40,19 +40,30 @@ namespace WiiUTexturesTool.Extract
                 string[] files = new string[textureCount];
                 for (int textureId = 0; textureId < textureCount; textureId++)
                 {
-                    texFile.Seek(16, SeekOrigin.Current); // Object hash
-                    texFile.Seek(3, SeekOrigin.Current); // not sure
+                    int hash = texFile.ReadInt() + texFile.ReadInt() + texFile.ReadInt() + texFile.ReadInt();
+                    if (hash != 0)
+                    {
+                        texFile.Seek(3, SeekOrigin.Current); // not sure
+                    }
                     string outputFile = texFile.ReadPascalString();
+                    Console.WriteLine(outputFile);
                     files[textureId] = outputFile;
 
                     texFile.Seek(9, SeekOrigin.Current); // Unknown
                 }
-
+                
+                texFile.Seek(ddsOffset, SeekOrigin.Begin);
                 Logger.Log("Extracting {0} textures:", textureCount);
 
                 for (int textureId = 0; textureId < textureCount; textureId++)
                 {
                     long ddsHeader = texFile.Position;
+
+                    if (files[textureId].StartsWith("/"))
+                    {
+                        Logger.Log("({0}) - {1} - Nothing to extract (external reference)", textureId, files[textureId]);
+                        continue;
+                    }
 
                     texFile.Seek(12, SeekOrigin.Current); // Skip past the DDS header
                     int height = texFile.ReadInt();
@@ -64,10 +75,10 @@ namespace WiiUTexturesTool.Extract
                     int fileSize = GetDataSize(width, height, Math.Max(1, mipmapCount), comType == "DXT1", isCubemap) + 0x80; // 0x80 for header
 
                     if (!files[textureId].Contains(@"\") && !files[textureId].Contains("/")) files[textureId] += "." + textureId;
-
+                    
                     string outputFile = Path.Combine(settings.OutputLocation, files[textureId]) + ".dds";
                     Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
-
+                    
                     using (ModFile ddsStream = texFile.LoadSegment(ddsHeader, fileSize))
                     {
                         if (settings.ShouldDeswizzle && IsPowerOfTwo(width) && IsPowerOfTwo(height) && width > 64 && height > 64)
