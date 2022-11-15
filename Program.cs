@@ -10,8 +10,8 @@ namespace WiiUTexturesTool
 #if DEBUG
             ExtractSettings settings = new ExtractSettings()
             {
-                InputLocation = @"/Users/connorharrison/Desktop/wiiutextures/COW_NXG.WIIU_TEXTURES",
-                OutputLocation = @"/Users/connorharrison/Desktop/wiiutextures/",
+                InputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\1WIZARDOFOZ\1WIZARDOFOZA\TECH\1WIZARDOFOZA_TECH_NXG.WIIU_TEXTURES",
+                OutputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\1WIZARDOFOZ\1WIZARDOFOZA\TECH\TEX",
                 ShouldDeswizzle = true
             };
             Extractor.Extract(settings);
