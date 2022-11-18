@@ -38,8 +38,8 @@ namespace WiiUTexturesTool.Extract
                 DDSFile[] files = new DDSFile[textureCount];
                 for (int textureId = 0; textureId < textureCount; textureId++)
                 {
-                    int hash = texFile.ReadInt() + texFile.ReadInt() + texFile.ReadInt() + texFile.ReadInt();
-                    if (hash != 0)
+                    long checksum = texFile.ReadLong() + texFile.ReadLong(); // 16-byte checksum
+                    if (checksum != 0)
                     {
                         texFile.Seek(3, SeekOrigin.Current); // not sure
                     }
