@@ -8,13 +8,16 @@ namespace WiiUTexturesTool
         static void Main(string[] args)
         {
 #if DEBUG
-            ExtractSettings settings = new ExtractSettings()
+            foreach (string file in Directory.EnumerateFiles(@"A:\Dimensions\EXTRACT\","*.WIIU_TEXTURES", SearchOption.AllDirectories))
             {
-                InputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\1WIZARDOFOZ\1WIZARDOFOZA\TECH\1WIZARDOFOZA_TECH_NXG.WIIU_TEXTURES",
-                OutputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\1WIZARDOFOZ\1WIZARDOFOZA\TECH\TEX",
-                ShouldDeswizzle = true
-            };
-            Extractor.Extract(settings);
+                ExtractSettings settings = new ExtractSettings()
+                {
+                    InputLocation = file,
+                    OutputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\1WIZARDOFOZ\1WIZARDOFOZA\TECH\TEX",
+                    ShouldDeswizzle = true
+                };
+                Extractor.Extract(settings);
+            }
 #else
             string command = args[0].ToLower();
             if (command == "extract" || command == "e")

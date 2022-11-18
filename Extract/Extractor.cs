@@ -28,7 +28,7 @@ namespace WiiUTexturesTool.Extract
                 if (!texFile.CheckString(".CC4TSXT", "Expected .CC4TSXT! Failing.")) return;
                 if (!texFile.CheckInt(1, "Expected 0x1! Failing.")) return;
                 if (!texFile.CheckString("TSXT", "Expected TSXT! Failing.")) return;
-                if (!texFile.CheckInt(0xe, "Expected version E! Failing.")) return;
+                if (!texFile.CheckInt(0xe, "Expected version E! Failing.")) return; // 6 files use version C, but I just don't care
                 
                 texFile.ReadBigPascalString(); // CONVDATE
 
@@ -39,18 +39,17 @@ namespace WiiUTexturesTool.Extract
                 for (int textureId = 0; textureId < textureCount; textureId++)
                 {
                     long checksum = texFile.ReadLong() + texFile.ReadLong(); // 16-byte checksum
-                    if (checksum != 0)
-                    {
-                        texFile.Seek(3, SeekOrigin.Current); // not sure
-                    }
-                    string outputFile = texFile.ReadPascalString();
-                    Console.WriteLine(outputFile);
-                    files[textureId].Name = outputFile;
 
-                    files[textureId].FirstByte = texFile.ReadByte();
-                    texFile.Seek(8, SeekOrigin.Current); // Unknown
+                    files[textureId].Path = texFile.ReadPascalString();
+                    files[textureId].Name = texFile.ReadPascalString();
+                    files[textureId].Type = (TextureType)texFile.ReadByte();
+                    files[textureId].Unknown1 = texFile.ReadByte();
+                    files[textureId].Unknown2 = texFile.ReadByte();
+                    files[textureId].Mipmaps = texFile.ReadShort(true);
+                    files[textureId].ObjectID = texFile.ReadPascalString();
+                    files[textureId].Unknown3 = texFile.ReadByte();
                 }
-                
+
                 texFile.Seek(ddsOffset, SeekOrigin.Begin);
                 Logger.Log("Extracting {0} textures:", textureCount);
 
@@ -58,9 +57,9 @@ namespace WiiUTexturesTool.Extract
                 {
                     long ddsHeader = texFile.Position;
 
-                    if (files[textureId].Name.StartsWith("/"))
+                    if (files[textureId].Path != string.Empty)
                     {
-                        Logger.Log("({0}) - {1} - Nothing to extract (external reference)", textureId, files[textureId]);
+                        Logger.Log("({0}) - {1} - Nothing to extract (external reference)", textureId, files[textureId].Path);
                         continue;
                     }
 
@@ -71,17 +70,17 @@ namespace WiiUTexturesTool.Extract
                     int mipmapCount = texFile.ReadInt();
                     texFile.Seek(52, SeekOrigin.Current);
                     string comType = texFile.ReadString(4);
-                    bool isCubemap = files[textureId].FirstByte == 6;
+                    bool isCubemap = files[textureId].Type == TextureType.Cubemap;
                     int fileSize = GetDataSize(width, height, Math.Max(1, mipmapCount), comType == "DXT1", isCubemap) + 0x80; // 0x80 for header
 
-                    if (!files[textureId].Name.Contains(@"\") && !files[textureId].Name.Contains("/")) files[textureId].Name += "." + textureId;
+                    if (!files[textureId].Name.Contains(@"\")) files[textureId].Path += "." + textureId; // Lightmaps are just called "Lightmap" and will overwrite each other
                     
                     string outputFile = Path.Combine(settings.OutputLocation, files[textureId].Name) + ".dds";
                     Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
                     
                     using (ModFile ddsStream = texFile.LoadSegment(ddsHeader, fileSize))
                     {
-                        if (settings.ShouldDeswizzle && IsPowerOfTwo(width) && IsPowerOfTwo(height) && width > 64 && height > 64)
+                        if (settings.ShouldDeswizzle && IsPowerOfTwo(width) && IsPowerOfTwo(height) && width > 64 && height > 64 && !isCubemap)
                         {
                             Logger.Log(new LogSeg("({0}) - {1} - ", textureId.ToString(), outputFile), new LogSeg("Deswizzling...", ConsoleColor.DarkYellow));
 
@@ -159,8 +158,22 @@ namespace WiiUTexturesTool.Extract
 
     internal struct DDSFile
     {
+        public string Path;
         public string Name;
-        public byte FirstByte;
+        public TextureType Type;
+        public byte Unknown1;
+        public byte Unknown2;
+        public short Mipmaps;
+        public string ObjectID;
+        public byte Unknown3;
+    }
+
+    internal enum TextureType
+    {
+        Diffuse = 0,
+        Normal = 1,
+        Cubemap = 6,
+        BRDF = 12
     }
 
     public struct ExtractSettings
