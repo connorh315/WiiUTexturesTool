@@ -13,6 +13,7 @@ namespace WiiUTexturesTool.Extract
         {
             using (ModFile texFile = ModFile.Open(settings.InputLocation))
             {
+                long originalFileLength = texFile.Length;
                 if (texFile.Status != ModFileStatus.Success)
                 {
                     Logger.Error("Failed to open file {0} due to {1}! Check that the file is not in use, and that the tool has access to the file!", settings.InputLocation, texFile.Status);
@@ -28,7 +29,12 @@ namespace WiiUTexturesTool.Extract
                 if (!texFile.CheckString(".CC4TSXT", "Expected .CC4TSXT! Failing.")) return;
                 if (!texFile.CheckInt(1, "Expected 0x1! Failing.")) return;
                 if (!texFile.CheckString("TSXT", "Expected TSXT! Failing.")) return;
-                if (!texFile.CheckInt(0xe, "Expected version E! Failing.")) return; // 6 files use version C, but I just don't care
+                uint tsxtVersion = texFile.ReadUint(true);
+                if (tsxtVersion != 0xE && tsxtVersion != 0xC)
+                {
+                    Logger.Error("Expected TSXT versions 0xC or 0xE!");
+                    return;
+                }
                 
                 texFile.ReadBigPascalString(); // CONVDATE
 
@@ -43,11 +49,15 @@ namespace WiiUTexturesTool.Extract
                     files[textureId].Path = texFile.ReadPascalString();
                     files[textureId].Name = texFile.ReadPascalString();
                     files[textureId].Type = (TextureType)texFile.ReadByte();
-                    files[textureId].Unknown1 = texFile.ReadByte();
-                    files[textureId].Unknown2 = texFile.ReadByte();
-                    files[textureId].Mipmaps = texFile.ReadShort(true);
-                    files[textureId].ObjectID = texFile.ReadPascalString();
-                    files[textureId].Unknown3 = texFile.ReadByte();
+                    
+                    if (tsxtVersion == 0xE)
+                    {
+                        files[textureId].Unknown1 = texFile.ReadByte();
+                        files[textureId].Unknown2 = texFile.ReadByte();
+                        files[textureId].Mipmaps = texFile.ReadShort(true);
+                        files[textureId].ObjectID = texFile.ReadPascalString();
+                        files[textureId].Unknown3 = texFile.ReadByte();
+                    }
                 }
 
                 texFile.Seek(ddsOffset, SeekOrigin.Begin);
@@ -55,6 +65,10 @@ namespace WiiUTexturesTool.Extract
 
                 for (int textureId = 0; textureId < textureCount; textureId++)
                 {
+                    if (textureId == 35)
+                    {
+                        Console.WriteLine();
+                    }
                     long ddsHeader = texFile.Position;
 
                     if (files[textureId].Path != string.Empty)
@@ -63,17 +77,15 @@ namespace WiiUTexturesTool.Extract
                         continue;
                     }
 
-                    texFile.Seek(12, SeekOrigin.Current); // Skip past the DDS header
-                    int height = texFile.ReadInt();
-                    int width = texFile.ReadInt();
-                    texFile.Seek(8, SeekOrigin.Current);
-                    int mipmapCount = texFile.ReadInt();
-                    texFile.Seek(52, SeekOrigin.Current);
-                    string comType = texFile.ReadString(4);
                     bool isCubemap = files[textureId].Type == TextureType.Cubemap;
-                    int fileSize = GetDataSize(width, height, Math.Max(1, mipmapCount), comType == "DXT1", isCubemap) + 0x80; // 0x80 for header
+                    int fileSize = CalculateSize(width, height, Math.Max(1, mipmapCount), comType == "DXT1", isCubemap) + 0x80 + (isCubemap && (fourty == 0x40) ? 0x70 : 0); // 0x80 for header and the 0x70 comes from the cubemaps with extra data...
+                    if (fileSize > 32000000 || fileSize <= 0)
+                    {
+                        Logger.Error("Calculated DDS file seems wrong! Most likely an error.");
+                        return;
+                    }
 
-                    if (!files[textureId].Name.Contains(@"\")) files[textureId].Path += "." + textureId; // Lightmaps are just called "Lightmap" and will overwrite each other
+                    if (!files[textureId].Name.Contains(@"\") && !files[textureId].Name.Contains(@"/")) files[textureId].Name += "." + textureId; // Lightmaps are just called "Lightmap" and will overwrite each other
                     
                     string outputFile = Path.Combine(settings.OutputLocation, files[textureId].Name) + ".dds";
                     Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
@@ -136,8 +148,31 @@ namespace WiiUTexturesTool.Extract
             }
         }
 
-        internal static int GetDataSize(int width, int height, int mipmapCount, bool isDXT1, bool isCubeMap)
-        {
+        internal static int GetFileSize(ModFile texFile, bool isCubemap)
+        { // Because CalculateSize isn't always correct, this checks that it lands on the next "DDS " header, and if not we trawl through the file from the original offset until we find it.
+            long origOffset = texFile.Position;
+            texFile.Seek(12, SeekOrigin.Current); // Skip past the DDS header
+            int height = texFile.ReadInt();
+            int width = texFile.ReadInt();
+            texFile.Seek(8, SeekOrigin.Current);
+            int mipmapCount = texFile.ReadInt();
+            texFile.Seek(52, SeekOrigin.Current);
+            string comType = texFile.ReadString(4);
+            texFile.Seek(0x1a, SeekOrigin.Current);
+            byte fourty = texFile.ReadByte();
+
+            int calculatedSize = CalculateSize(width, height, Math.Max(1, mipmapCount), comType == "DXT1", isCubemap) + 0x80 + (isCubemap && (fourty == 0x40) ? 0x70 : 0); // 0x80 for header and the 0x70 comes from the cubemaps with extra data...
+            texFile.Seek(origOffset + calculatedSize, SeekOrigin.Begin);
+            if (texFile.CheckString("DDS ", string.Empty))
+            {
+                texFile.Seek(origOffset, SeekOrigin.Begin);
+                return 
+            }
+
+        }
+
+        internal static int CalculateSize(int width, int height, int mipmapCount, bool isDXT1, bool isCubeMap)
+        { // Works fine 99% of the time, but that 1% just isn't good enough
             int totalSize = 0;
             int blockSize = isDXT1 ? 8 : 16;
             for (int i = 0; i < mipmapCount; i++)
@@ -147,7 +182,7 @@ namespace WiiUTexturesTool.Extract
                 width /= 2;
                 height /= 2;
             }
-            return isCubeMap ? totalSize * 6 : totalSize;
+            return isCubeMap ? totalSize * 6 : totalSize; // high-five for anyone who can tell me why DXT5 requires an extra 0x70 bytes for cubemaps
         }
 
         internal static bool IsPowerOfTwo(int x)
