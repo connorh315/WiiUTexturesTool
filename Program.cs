@@ -5,6 +5,8 @@ namespace WiiUTexturesTool
 {
     internal class Program
     {
+        static string Version = "1.0";
+
         static void Main(string[] args)
         {
 #if DEBUG
@@ -19,6 +21,16 @@ namespace WiiUTexturesTool
                 Extractor.Extract(settings);
             //}
 #else
+            if (args.Length == 0)
+            {
+                Logger.Log(new LogSeg("WiiUTexturesTool - "), new LogSeg("Version {0}", ConsoleColor.DarkYellow, Version));
+                Logger.Log(new LogSeg("Author: "), new LogSeg("Connor", ConsoleColor.Green));
+
+                ShowOptions();
+                Console.ReadKey();
+                return;
+            }
+
             string command = args[0].ToLower();
             if (command == "extract" || command == "e")
             {
@@ -59,6 +71,22 @@ namespace WiiUTexturesTool
                 Logger.Log("Extracting {0} into {1} with deswizzling {2}", settings.InputLocation, settings.OutputLocation, settings.ShouldDeswizzle ? "enabled" : "disabled");
                 Extractor.Extract(settings);
             }
+            else if (command == "import" || command == "i")
+            {
+                Logger.Error("Not yet supported - Check if a newer version of WiiUTexturesTool is available!");
+            }
+            else
+            {
+                if (args[0].ToLower().EndsWith("wiiu_textures"))
+                {
+                    Extractor.Extract(new ExtractSettings()
+                    {
+                        InputLocation = args[0],
+                        OutputLocation = GetOutputFromInput(args[0]),
+                        ShouldDeswizzle = true
+                    });
+                }
+            }
 #endif
         }
 
@@ -66,6 +94,56 @@ namespace WiiUTexturesTool
         {
             return (arg == option) || (arg == "-" + option[0]) || (arg == "--" + option[0]) || (arg == "-" + option) ||
                    (arg == "--" + option);
+        }
+
+        private static string GetOutputFromInput(string inputLocation)
+        {
+            return (Path.IsPathFullyQualified(inputLocation) ? Path.GetDirectoryName(inputLocation) : Directory.GetCurrentDirectory()) + "\\" + Path.GetFileNameWithoutExtension(inputLocation);
+        }
+
+        private static void ShowOptions()
+        {
+            Console.WriteLine();
+            Logger.Log("What would you like to do?");
+            Logger.Log(new LogSeg("1) "), new LogSeg("Extract textures from wiiu_textures", ConsoleColor.Gray));
+            if (Console.ReadKey().Key == ConsoleKey.D1)
+            {
+                ShowExtract();
+            }
+            else
+            {
+                Console.WriteLine();
+                Logger.Error("Invalid option\n");
+                ShowOptions();
+            }
+        }
+
+        private static void ShowExtract()
+        {
+            Logger.Log(new LogSeg("\nDrag and drop your wiiu_textures file here and press enter:"));
+            string input = Console.ReadLine();
+            if (input.Length < 4)
+            { // Fail safe
+                Logger.Error("Input {0} is too short to be a valid file!", input);
+                ShowExtract();
+            }
+
+            if (input[0] == '"') input = input.Substring(1, (input[input.Length - 1] == '"') ? input.Length - 2 : input.Length - 1); // Strip speech marks
+
+            if (File.Exists(input))
+            {
+                Extractor.Extract(new ExtractSettings()
+                {
+                    InputLocation = input,
+                    OutputLocation = GetOutputFromInput(input),
+                    ShouldDeswizzle = true
+                });
+            }
+            else
+            {
+                Logger.Error("File {0} does not exist!\n", input);
+                ShowExtract();
+            }
         }
     }
 }
