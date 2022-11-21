@@ -1,6 +1,6 @@
 # WiiUTexturesTool
 
-Command-line tool for extracting wiiu_textures files from Wii-U LEGO games!
+Command-line tool for extracting wiiu_textures files from Wii-U LEGO Dimensions!
 
 # Usage
 
