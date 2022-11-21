@@ -77,14 +77,17 @@ namespace WiiUTexturesTool
             }
             else
             {
-                if (args[0].ToLower().EndsWith("wiiu_textures"))
+                foreach (string arg in args)
                 {
-                    Extractor.Extract(new ExtractSettings()
+                    if (arg.ToLower().EndsWith("wiiu_textures"))
                     {
-                        InputLocation = args[0],
-                        OutputLocation = GetOutputFromInput(args[0]),
-                        ShouldDeswizzle = true
-                    });
+                        Extractor.Extract(new ExtractSettings()
+                        {
+                            InputLocation = arg,
+                            OutputLocation = GetOutputFromInput(arg),
+                            ShouldDeswizzle = true
+                        });
+                    }
                 }
             }
 #endif
