@@ -41,7 +41,7 @@ namespace WiiUTexturesTool.Extract
                 if (!texFile.CheckString("ROTV", "Expected ROTV! Failing.")) return;
                 uint textureCount = texFile.ReadUint(true);
 
-                DDSFile[] files = new DDSFile[textureCount];
+                DDSFileHeader[] files = new DDSFileHeader[textureCount];
                 for (int textureId = 0; textureId < textureCount; textureId++)
                 {
                     long checksum = texFile.ReadLong() + texFile.ReadLong(); // 16-byte checksum
@@ -65,10 +65,6 @@ namespace WiiUTexturesTool.Extract
 
                 for (int textureId = 0; textureId < textureCount; textureId++)
                 {
-                    if (textureId == 35)
-                    {
-                        Console.WriteLine();
-                    }
                     long ddsHeader = texFile.Position;
 
                     if (files[textureId].Path != string.Empty)
@@ -78,21 +74,16 @@ namespace WiiUTexturesTool.Extract
                     }
 
                     bool isCubemap = files[textureId].Type == TextureType.Cubemap;
-                    int fileSize = CalculateSize(width, height, Math.Max(1, mipmapCount), comType == "DXT1", isCubemap) + 0x80 + (isCubemap && (fourty == 0x40) ? 0x70 : 0); // 0x80 for header and the 0x70 comes from the cubemaps with extra data...
-                    if (fileSize > 32000000 || fileSize <= 0)
-                    {
-                        Logger.Error("Calculated DDS file seems wrong! Most likely an error.");
-                        return;
-                    }
+                    DDSFile file = GetFile(texFile, isCubemap);
 
                     if (!files[textureId].Name.Contains(@"\") && !files[textureId].Name.Contains(@"/")) files[textureId].Name += "." + textureId; // Lightmaps are just called "Lightmap" and will overwrite each other
                     
                     string outputFile = Path.Combine(settings.OutputLocation, files[textureId].Name) + ".dds";
                     Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
                     
-                    using (ModFile ddsStream = texFile.LoadSegment(ddsHeader, fileSize))
+                    using (ModFile ddsStream = texFile.LoadSegment(ddsHeader, file.Length))
                     {
-                        if (settings.ShouldDeswizzle && IsPowerOfTwo(width) && IsPowerOfTwo(height) && width > 64 && height > 64 && !isCubemap)
+                        if (settings.ShouldDeswizzle && IsPowerOfTwo(file.Width) && IsPowerOfTwo(file.Height) && file.Width > 64 && file.Height > 64 && !isCubemap)
                         {
                             Logger.Log(new LogSeg("({0}) - {1} - ", textureId.ToString(), outputFile), new LogSeg("Deswizzling...", ConsoleColor.DarkYellow));
 
@@ -107,13 +98,17 @@ namespace WiiUTexturesTool.Extract
                                 };
                             }
 
-                            if (comType == "DXT1")
+                            if (file.ComType == 1)
                             {
-                                pairs = DXT1.Deswizzle(pairs, width, height, mipmapCount);
+                                pairs = DXT1.Deswizzle(pairs, file.Width, file.Height, file.Mipmaps);
+                            }
+                            else if (file.ComType == 5)
+                            {
+                                pairs = DXT5.Deswizzle(pairs, file.Width, file.Height, file.Mipmaps);
                             }
                             else
                             {
-                                pairs = DXT5.Deswizzle(pairs, width, height, mipmapCount);
+                                Logger.Warn("DDS file uses unknown compression type - File may not have extracted correctly.");
                             }
 
                             using (ModFile ddsFile = ModFile.Create(outputFile))
@@ -141,14 +136,14 @@ namespace WiiUTexturesTool.Extract
                         }
                     }
 
-                    texFile.Seek(ddsHeader + fileSize, SeekOrigin.Begin);
+                    texFile.Seek(ddsHeader + file.Length, SeekOrigin.Begin);
                 }
 
                 Logger.Log("Done!");
             }
         }
 
-        internal static int GetFileSize(ModFile texFile, bool isCubemap)
+        internal static DDSFile GetFile(ModFile texFile, bool isCubemap)
         { // Because CalculateSize isn't always correct, this checks that it lands on the next "DDS " header, and if not we trawl through the file from the original offset until we find it.
             long origOffset = texFile.Position;
             texFile.Seek(12, SeekOrigin.Current); // Skip past the DDS header
@@ -157,18 +152,41 @@ namespace WiiUTexturesTool.Extract
             texFile.Seek(8, SeekOrigin.Current);
             int mipmapCount = texFile.ReadInt();
             texFile.Seek(52, SeekOrigin.Current);
-            string comType = texFile.ReadString(4);
+
+            string comSign = texFile.ReadString(4);
+            byte comType;
+            switch (comSign)
+            {
+                case "DXT1":
+                    comType = 1;
+                    break;
+                case "DXT5":
+                    comType = 5;
+                    break;
+                default:
+                    comType = 0xff;
+                    break;
+            }
+            
             texFile.Seek(0x1a, SeekOrigin.Current);
             byte fourty = texFile.ReadByte();
 
-            int calculatedSize = CalculateSize(width, height, Math.Max(1, mipmapCount), comType == "DXT1", isCubemap) + 0x80 + (isCubemap && (fourty == 0x40) ? 0x70 : 0); // 0x80 for header and the 0x70 comes from the cubemaps with extra data...
+            int calculatedSize = CalculateSize(width, height, Math.Max(1, mipmapCount), comType == 1, isCubemap) + 0x80 + (isCubemap && (fourty == 0x40) ? 0x70 : 0); // 0x80 for header and the 0x70 comes from the cubemaps with extra data...
+            DDSFile file = new DDSFile(width, height, mipmapCount, calculatedSize, comType);
+
             texFile.Seek(origOffset + calculatedSize, SeekOrigin.Begin);
-            if (texFile.CheckString("DDS ", string.Empty))
+            if (texFile.Position != texFile.Length && !texFile.CheckString("DDS ", string.Empty))
             {
-                texFile.Seek(origOffset, SeekOrigin.Begin);
-                return 
+                // If we did not correctly calculate the file size, a more "brute" approach is required
+                texFile.Seek(origOffset + 1, SeekOrigin.Begin);
+
+                int find = texFile.Find("DDS ");
+                file.Length = (int)((find != -1) ? find + 1 : (texFile.Length - texFile.Position));
             }
 
+            texFile.Seek(origOffset, SeekOrigin.Begin);
+
+            return file;
         }
 
         internal static int CalculateSize(int width, int height, int mipmapCount, bool isDXT1, bool isCubeMap)
@@ -191,7 +209,7 @@ namespace WiiUTexturesTool.Extract
         }
     }
 
-    internal struct DDSFile
+    internal struct DDSFileHeader
     {
         public string Path;
         public string Name;
@@ -201,6 +219,24 @@ namespace WiiUTexturesTool.Extract
         public short Mipmaps;
         public string ObjectID;
         public byte Unknown3;
+    }
+
+    internal struct DDSFile
+    {
+        public int Width;
+        public int Height;
+        public int Mipmaps;
+        public int Length;
+        public byte ComType;
+
+        public DDSFile(int width, int height, int mipmaps, int length, byte comType)
+        {
+            Width = width;
+            Height = height;
+            Mipmaps = mipmaps;
+            Length = length;
+            ComType = comType;
+        }
     }
 
     internal enum TextureType
