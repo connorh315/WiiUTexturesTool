@@ -5,14 +5,11 @@ namespace WiiUTexturesTool.Extract
 {
     internal static class DXT1
     {
-        private static int pairsPerLine;
-
         internal static Pair[] Deswizzle(Pair[] pairs, int width, int height, int mipmapCount)
         {
             mipmapCount = Math.Max(mipmapCount, 1);
             pairsPerLine = width / 8;
-            Pair[] result = new Pair[pairs.Length];
-            Array.Copy(pairs, result, pairs.Length);
+            Pair[] result = DuplicatePairs(pairs);
 
             int mipmapPairCount = pairsPerLine * (height / 4);
             int mipmapPairOffset = 0;
@@ -32,6 +29,42 @@ namespace WiiUTexturesTool.Extract
                 if (width <= 64 || height <= 64) break; // Swizzling does not occur once width/height reach 64 px
             }
 
+            return result;
+        }
+
+        internal static Pair[] Swizzle(Pair[] pairs, int width, int height, int mipmapCount)
+        {
+            mipmapCount = Math.Max(mipmapCount, 1);
+            pairsPerLine = width / 8;
+            Pair[] result = DuplicatePairs(pairs);
+
+            int mipmapPairCount = pairsPerLine * (height / 4);
+            int mipmapPairOffset = 0;
+            for (int mipmapId = 0; mipmapId < mipmapCount; mipmapId++)
+            {
+                for (int pairPos = mipmapPairOffset; pairPos < mipmapPairOffset + mipmapPairCount; pairPos++) // < mipmapPairOffset + mipmapPairCount
+                {
+                    int i = pairPos - mipmapPairOffset;
+                    int pos = GetArrayOffset(GetGlobalOffset(GetWOffset(GetChunkOffset(GetLocalOffset(i), i), i), i));
+                    result[pairPos] = pairs[mipmapPairOffset + pos];
+                }
+                mipmapPairOffset += mipmapPairCount;
+                mipmapPairCount /= 4;
+                pairsPerLine /= 2;
+                width /= 2;
+                height /= 2;
+                if (width <= 64 || height <= 64) break; // Swizzling does not occur once width/height reach 64 px
+            }
+
+            return result;
+        }
+
+        private static int pairsPerLine;
+
+        private static Pair[] DuplicatePairs(Pair[] pairs)
+        {
+            Pair[] result = new Pair[pairs.Length];
+            Array.Copy(pairs, result, pairs.Length);
             return result;
         }
 

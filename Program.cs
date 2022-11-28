@@ -9,6 +9,42 @@ namespace WiiUTexturesTool
 
         static void Main(string[] args)
         {
+            string input = @"A:\Dimensions\EXTRACT\LEVELS\STORY\11SCOOBYDOO\11SCOOBYDOOA\11SCOOBYDOOA_NXG_DESWIZZLED\Lightmap.3.dds";
+            using (ModFile file = ModFile.Open(input, true))
+            {
+                file.Seek(12, SeekOrigin.Begin);
+                int height = file.ReadInt();
+                int width = file.ReadInt();
+                file.Seek(8, SeekOrigin.Current);
+                int mipmapCount = file.ReadInt();
+                file.Seek(0x80, SeekOrigin.Begin);
+
+                Pair[] pairs = new Pair[(int)Math.Ceiling(((float)(file.Length - file.Position)) / 16)];
+                for (int i = 0; i < pairs.Length; i++)
+                {
+                    pairs[i] = new Pair()
+                    {
+                        Part1 = file.ReadLong(),
+                        Part2 = file.ReadLong()
+                    };
+                }
+
+                Pair[] result = DXT1.Swizzle(pairs, width, height, mipmapCount);
+
+                using (ModFile resultFile = ModFile.Create(@"A:\Dimensions\EXTRACT\LEVELS\STORY\11SCOOBYDOO\11SCOOBYDOOA\11SCOOBYDOOA_NXG_DESWIZZLED\Lightmap.3.1.dds"))
+                {
+                    file.Seek(0, SeekOrigin.Begin);
+                    file.fileStream.SetLength(0x80);
+                    file.fileStream.CopyTo(resultFile.fileStream);
+
+                    for (int i = 0; i < result.Length; i++)
+                    {
+                        resultFile.WriteLong(result[i].Part1);
+                        resultFile.WriteLong(result[i].Part2);
+                    }
+                }
+            }
+            return;
 #if DEBUG
             //foreach (string file in Directory.EnumerateFiles(@"A:\Dimensions\EXTRACT\LEVELS\STORY\", "*.WIIU_TEXTURES", SearchOption.AllDirectories))
             //{
