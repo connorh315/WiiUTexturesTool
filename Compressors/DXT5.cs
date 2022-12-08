@@ -1,7 +1,7 @@
 ﻿using System.Numerics;
 using ModLib;
 
-namespace WiiUTexturesTool.Extract
+namespace WiiUTexturesTool.Compressors
 {
     internal static class DXT5
     {
