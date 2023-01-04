@@ -49,40 +49,30 @@ namespace WiiUTexturesTool
                             Logger.Log(new LogSeg("({0}) - {1} - ", textureId.ToString(), outputFile), new LogSeg("Deswizzling...", ConsoleColor.DarkYellow));
 
                             ddsStream.Seek(0x80, SeekOrigin.Begin);
-                            Pair[] pairs = new Pair[(int)Math.Ceiling(((float)(ddsStream.Length - ddsStream.Position)) / 16)];
-                            for (int i = 0; i < pairs.Length; i++)
+
+                            using (ModFile ddsFile = ModFile.Create())
                             {
-                                pairs[i] = new Pair()
+                                if (file.ComType == 1)
                                 {
-                                    Part1 = ddsStream.ReadLong(),
-                                    Part2 = ddsStream.ReadLong()
-                                };
-                            }
+                                    DXT1.Deswizzle(ddsFile, ddsStream, file.Width, file.Height, file.Mipmaps);
+                                }
+                                else if (file.ComType == 5)
+                                {
+                                    DXT5.Deswizzle(ddsFile, ddsStream, file.Width, file.Height, file.Mipmaps);
+                                }
+                                else
+                                {
+                                    Logger.Warn("DDS file uses unknown compression type - File may not have extracted correctly.");
+                                }
 
-                            if (file.ComType == 1)
-                            {
-                                pairs = DXT1.Deswizzle(pairs, file.Width, file.Height, file.Mipmaps);
-                            }
-                            else if (file.ComType == 5)
-                            {
-                                pairs = DXT5.Deswizzle(pairs, file.Width, file.Height, file.Mipmaps);
-                            }
-                            else
-                            {
-                                Logger.Warn("DDS file uses unknown compression type - File may not have extracted correctly.");
-                            }
+                                ddsStream.fileStream.CopyTo(ddsFile.fileStream);
 
-                            using (ModFile ddsFile = ModFile.Create(outputFile))
-                            {
                                 ddsStream.Seek(0, SeekOrigin.Begin);
+                                ddsFile.Seek(0, SeekOrigin.Begin);
                                 ddsStream.fileStream.SetLength(0x80);
                                 ddsStream.fileStream.CopyTo(ddsFile.fileStream);
 
-                                for (int id = 0; id < pairs.Length; id++)
-                                {
-                                    ddsFile.WriteLong(pairs[id].Part1);
-                                    ddsFile.WriteLong(pairs[id].Part2);
-                                }
+                                ddsFile.WriteToFile(outputFile); // Improvement over writing direct to disk due to random writes involved in deswizzling
                             }
                         }
                         else
@@ -128,7 +118,7 @@ namespace WiiUTexturesTool
                     bool isCubemap = attributes[textureId].Type == TextureType.Cubemap;
                     DDSFileHeader file = GetFileInfo(wutFile, isCubemap);
 
-                    ModFile ddsFile = ModFile.Create();
+                    ModFile ddsFile = ModFile.Create(file.Length);
                     files[textureId].File = ddsFile;
 
                     using (ModFile ddsStream = wutFile.LoadSegment(ddsHeader, file.Length))
@@ -136,34 +126,22 @@ namespace WiiUTexturesTool
                         if (IsPowerOfTwo(file.Width) && IsPowerOfTwo(file.Height) && file.Width > 64 && file.Height > 64 && !isCubemap)
                         {
                             ddsStream.Seek(0x80, SeekOrigin.Begin);
-                            Pair[] pairs = new Pair[(int)Math.Ceiling(((float)(ddsStream.Length - ddsStream.Position)) / 16)];
-                            for (int i = 0; i < pairs.Length; i++)
-                            {
-                                pairs[i] = new Pair()
-                                {
-                                    Part1 = ddsStream.ReadLong(),
-                                    Part2 = ddsStream.ReadLong()
-                                };
-                            }
-
+                            
                             if (file.ComType == 1)
                             {
-                                pairs = DXT1.Deswizzle(pairs, file.Width, file.Height, file.Mipmaps);
+                                DXT1.Deswizzle(ddsFile, ddsStream, file.Width, file.Height, file.Mipmaps);
                             }
                             else if (file.ComType == 5)
                             {
-                                pairs = DXT5.Deswizzle(pairs, file.Width, file.Height, file.Mipmaps);
+                                DXT5.Deswizzle(ddsFile, ddsStream, file.Width, file.Height, file.Mipmaps);
                             }
 
-                            ddsStream.Seek(0, SeekOrigin.Begin);
-                            ddsStream.fileStream.SetLength(0x80);
                             ddsStream.fileStream.CopyTo(ddsFile.fileStream);
 
-                            for (int id = 0; id < pairs.Length; id++)
-                            {
-                                ddsFile.WriteLong(pairs[id].Part1);
-                                ddsFile.WriteLong(pairs[id].Part2);
-                            }
+                            ddsStream.Seek(0, SeekOrigin.Begin);
+                            ddsFile.Seek(0, SeekOrigin.Begin);
+                            ddsStream.fileStream.SetLength(0x80);
+                            ddsStream.fileStream.CopyTo(ddsFile.fileStream);
                         }
                         else
                         {

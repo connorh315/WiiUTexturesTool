@@ -47,13 +47,13 @@ namespace WiiUTexturesTool
 #if DEBUG
             //foreach (string file in Directory.EnumerateFiles(@"A:\Dimensions\EXTRACT\LEVELS\STORY\", "*.WIIU_TEXTURES", SearchOption.AllDirectories))
             //{
-                ExtractSettings settings = new ExtractSettings()
-                {
-                    InputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\4DOCTORWHO\4DOCTORWHO_MATERIALS_NXG.WIIU_TEXTURES",
-                    OutputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\4DOCTORWHO",
-                    ShouldDeswizzle = true
-                };
-                Extractor.Extract(settings);
+                //ExtractSettings settings = new ExtractSettings()
+                //{
+                //    InputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\4DOCTORWHO\4DOCTORWHO_MATERIALS_NXG.WIIU_TEXTURES",
+                //    OutputLocation = @"A:\Dimensions\EXTRACT\LEVELS\STORY\4DOCTORWHO",
+                //    ShouldDeswizzle = true
+                //};
+                //Extractor.Extract(settings);
             //}
 #else
             if (args.Length == 0)

@@ -32,6 +32,40 @@ namespace WiiUTexturesTool.Compressors
             return result;
         }
 
+        internal static void Deswizzle(ModFile resultFile, ModFile originalFile, int width, int height, int mipmapCount)
+        {
+            mipmapCount = Math.Max(mipmapCount, 1);
+            pairsPerLine = width / 8;
+            //Pair[] result = DuplicatePairs(pairs);
+
+            int mipmapPairCount = pairsPerLine * (height / 4);
+            int mipmapPairOffset = 0;
+            byte[] buffer = new byte[16];
+            originalFile.Seek(0x80, SeekOrigin.Begin);
+            for (int mipmapId = 0; mipmapId < mipmapCount; mipmapId++)
+            {
+                for (int pairPos = mipmapPairOffset; pairPos < mipmapPairOffset + mipmapPairCount; pairPos++) // < mipmapPairOffset + mipmapPairCount
+                {
+                    int i = pairPos - mipmapPairOffset;
+                    int pos = GetArrayOffset(GetGlobalOffset(GetWOffset(GetChunkOffset(GetLocalOffset(i), i), i), i));
+                    originalFile.ReadInto(buffer, 16);
+                    resultFile.Seek(0x80 + (16 * (mipmapPairOffset + pos)), SeekOrigin.Begin);
+                    resultFile.fileStream.Write(buffer, 0, 16);
+                    //result[mipmapPairOffset + pos] = pairs[pairPos];
+                }
+                mipmapPairOffset += mipmapPairCount;
+                mipmapPairCount /= 4;
+                pairsPerLine /= 2;
+                width /= 2;
+                height /= 2;
+                if (width <= 64 || height <= 64)
+                {
+                    resultFile.Seek(originalFile.Position, SeekOrigin.Begin);
+                    break; // Swizzling does not occur once width/height reach 64 px
+                }
+            }
+        }
+
         internal static Pair[] Swizzle(Pair[] pairs, int width, int height, int mipmapCount)
         {
             mipmapCount = Math.Max(mipmapCount, 1);
